@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::Path;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -11,8 +13,9 @@ struct State {
     queue: wgpu::Queue,
     sc_desc: wgpu::SwapChainDescriptor,
     swap_chain: wgpu::SwapChain,
-    // render_pipeline: 
     size: winit::dpi::PhysicalSize<u32>,
+    render_pipeline: wgpu::RenderPipeline,
+    // shader_str: str
 }
 
 impl State {
@@ -27,15 +30,13 @@ impl State {
         let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-            },
+                compatible_surface: Some(&surface)},
         ).await.unwrap();
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
                 limits: wgpu::Limits::default(),
-                label: None,
-            },
+                label: None},
             None, // Trace path
         ).await.unwrap();
         let sc_desc = wgpu::SwapChainDescriptor {
@@ -45,14 +46,60 @@ impl State {
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo};
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        Self{surface, device, queue, sc_desc, swap_chain, size}
+        // let shader_str = include_str!("shader.wgsl");
+        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Shader"),
+            flags: wgpu::ShaderFlags::all(),
+            source: wgpu::ShaderSource::Wgsl(include_str!("./demo.wgsl").into()),
+        });
+        let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[]});
+            let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render Pipeline"),
+                layout: Some(&render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: "main", // 1.
+                    buffers: &[], // 2.
+                },
+                fragment: Some(wgpu::FragmentState { // 3.
+                    module: &shader,
+                    entry_point: "main",
+                    targets: &[wgpu::ColorTargetState { // 4.
+                        format: sc_desc.format,
+                        blend: Some(wgpu::BlendState::REPLACE),
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList, // 1.
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw, // 2.
+                    cull_mode: Some(wgpu::Face::Back),
+                    // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    // Requires Features::DEPTH_CLAMPING
+                    clamp_depth: false,
+                    // Requires Features::CONSERVATIVE_RASTERIZATION
+                    conservative: false,
+                },
+                depth_stencil: None, // 1.
+                multisample: wgpu::MultisampleState {
+                    count: 1, // 2.
+                    mask: !0, // 3.
+                    alpha_to_coverage_enabled: false, // 4.
+                },
+            });
+        Self{surface, device, queue, sc_desc, swap_chain, size, render_pipeline}
     }
 
     fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Render Encoder")});
         {
-            let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
                     wgpu::RenderPassColorAttachment {
@@ -60,14 +107,11 @@ impl State {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Clear(wgpu::Color {r: 0.1, g: 0.2, b: 0.3, a: 1.0}),
-                            store: true,
-                        }
-                    }
-                ],
+                            store: true}}],
                 depth_stencil_attachment: None,
             });
-            // render_pass.set_pipeline(&self.render_pipeline);
-            // render_pass.draw(0..3, 0..1);
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
         }
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -94,6 +138,13 @@ impl State {
 
 fn main() {
     println!("Slim Shader!");
+
+    let filename = std::env::args().nth(1).expect("no path to file fiven");
+    let path = Path::new(&filename);
+    println!("{:?}", path);
+
+    let content = fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
+    println!("{}", content);
 
     env_logger::init();
     let event_loop = EventLoop::new();
