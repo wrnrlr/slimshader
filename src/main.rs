@@ -31,7 +31,7 @@ impl State {
         ).await.unwrap();
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
-                features: wgpu::Features::empty(),
+                features: wgpu::Features::default(),
                 limits: wgpu::Limits::default(),
                 label: None},
             None,
@@ -41,27 +41,31 @@ impl State {
             format: adapter.get_swap_chain_preferred_format(&surface).unwrap(),
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo};
+            present_mode: wgpu::PresentMode::Fifo}; // Faster framerate with Immediate or Mailbox but this is not optimal for mobile... 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         // let shader_str = include_str!("shader.wgsl");
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Shader"),
+        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex Shader"),
+            flags: wgpu::ShaderFlags::all(),
+            source: wgpu::ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
+        let fragment_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Fragment Shader"),
             flags: wgpu::ShaderFlags::all(),
             source: wgpu::ShaderSource::Wgsl(include_str!("./demo.wgsl").into())});
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[], // TODO add bind group for uniform buffer with screen resolution
             push_constant_ranges: &[]});
             let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Render Pipeline"),
                 layout: Some(&render_pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &shader,
+                    module: &vertex_shader,
                     entry_point: "main",
                     buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &shader,
+                    module: &fragment_shader,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: sc_desc.format,
