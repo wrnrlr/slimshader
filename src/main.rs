@@ -1,11 +1,15 @@
-use std::fs;
-use std::path::Path;
+use std::{fs, str::FromStr};
+use std::path::PathBuf;
+use std::sync::mpsc::channel;
 use winit::{
     event::*,
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window}};
 use wgpu;
 use pollster;
+use notify::{RawEvent, RecommendedWatcher, Watcher};
+
+struct ReloadEvent;
 
 struct State {
     surface: wgpu::Surface,
@@ -139,17 +143,32 @@ fn main() {
     println!("Slim Shader!");
 
     let filename = std::env::args().nth(1).expect("no path to file fiven");
-    let path = Path::new(&filename);
+    let path = PathBuf::from(filename);
     println!("{:?}", path);
 
     let content = fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
     println!("{}", content);
 
     env_logger::init();
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
 
+    let event_loop:EventLoop<ReloadEvent> = EventLoop::with_user_event();
+    let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut state = pollster::block_on(State::new(&window));
+
+    {
+        std::thread::spawn(move || {
+            let (tx, rx) = channel();
+            let mut watcher: RecommendedWatcher = Watcher::new_raw(tx).unwrap();
+            watcher.watch(&path, notify::RecursiveMode::NonRecursive).unwrap();
+            loop {
+                match rx.recv() {
+                    Ok(RawEvent {path: Some(_), op: Ok(_), ..}) => println!("reload fragment shader"),
+                    Ok(event) => println!("broken event: {:?}", event),
+                    Err(e) => println!("watch error: {:?}", e),
+                }
+            }
+        });
+    }
 
     event_loop.run(move |event, _, control_flow| {
         match event {
