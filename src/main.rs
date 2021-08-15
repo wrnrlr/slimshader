@@ -3,7 +3,7 @@ use std::{fs,
     path::{PathBuf,Path},
     sync::mpsc::channel};
 use winit::{
-    event::{Event,WindowEvent,KeyboardInput,VirtualKeyCode,ElementState},
+    event::{Event,Event::{RedrawRequested,MainEventsCleared,UserEvent},WindowEvent,KeyboardInput,VirtualKeyCode,ElementState},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window}};
 use pollster::block_on;
@@ -231,21 +231,18 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         match event {
-            Event::RedrawRequested(_) => {
+            RedrawRequested(_) => {
                 state.uniforms.playime = instant.elapsed().as_secs_f32();
                 state.update();
                 match state.render() {
                     Ok(_) => {}
-                    // Recreate the swap_chain if lost
                     Err(SwapChainError::Lost) => state.resize(state.size),
-                    // The system is out of memory, we should probably quit
                     Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                    // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 }
             }
-            Event::MainEventsCleared => { state.window.request_redraw(); }
-            Event::UserEvent(ReloadEvent) => { state.reload(); }
+            MainEventsCleared => { state.window.request_redraw(); }
+            UserEvent(ReloadEvent) => { state.reload(); }
             Event::WindowEvent {ref event, window_id} if window_id == state.window.id() => if !state.input(event) {
                 match event {
                     WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
