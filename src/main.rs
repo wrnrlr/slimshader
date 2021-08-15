@@ -3,7 +3,7 @@ use std::{fs,
     path::{PathBuf,Path},
     sync::mpsc::channel};
 use winit::{
-    event::*,
+    event::{Event,WindowEvent,KeyboardInput,VirtualKeyCode,ElementState},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window}};
 use pollster;
@@ -138,7 +138,7 @@ impl State {
             self.sc_desc.width = new_size.width;
             self.sc_desc.height = new_size.height;
             self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
-            self.uniforms = [new_size.width as f32, new_size.height as f32];
+            self.uniforms.resolution = [new_size.width as f32, new_size.height as f32];
         }
     }
 
