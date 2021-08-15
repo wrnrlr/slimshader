@@ -18,7 +18,7 @@ struct ReloadEvent;
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
-    pub resolution: [u32; 2],
+    pub resolution: [f32; 2],
     pub playime: f32,
 }
 
@@ -68,7 +68,7 @@ impl State {
             label: Some("Vertex Shader"),
             flags: wgpu::ShaderFlags::all(),
             source: wgpu::ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
-        let uniforms = Uniforms{resolution: [size.width, size.height], playime: 0.0};
+        let uniforms = Uniforms{resolution: [size.width as f32, size.height as f32], playime: 0.0};
         let uniforms_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Uniform Buffer"),
@@ -79,7 +79,7 @@ impl State {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::VERTEX,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
