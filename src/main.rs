@@ -49,7 +49,6 @@ impl State {
     // Creating some of the wgpu types requires async code
     async fn new(window: Window, fragment_path: &Path) -> Self {
         let size = window.inner_size();
-
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance.request_adapter(
@@ -139,6 +138,7 @@ impl State {
             self.sc_desc.width = new_size.width;
             self.sc_desc.height = new_size.height;
             self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+            self.uniforms = [new_size.width as f32, new_size.height as f32];
         }
     }
 
