@@ -6,8 +6,9 @@ use winit::{
     event::{Event,WindowEvent,KeyboardInput,VirtualKeyCode,ElementState},
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window}};
-use pollster;
+use pollster::block_on;
 use notify::{RawEvent, RecommendedWatcher, Watcher};
+use wgpu::{Surface, Device, Queue, Instance, DeviceDescriptor, SwapChainDescriptor, TextureFormat, SwapChain, PipelineLayout, RenderPipeline, Buffer, BindGroup, ShaderModule, ShaderSource, ShaderFlags, ShaderModuleDescriptor, BindGroupEntry, RequestAdapterOptions, ShaderStage, BindingType, BufferBindingType, BufferUsage, RenderPipelineDescriptor, VertexState, FragmentState, PowerPreference, BackendBit, BindGroupDescriptor, BindGroupLayoutDescriptor, RenderPassDescriptor, PipelineLayoutDescriptor, BindGroupLayoutEntry, SwapChainError, RenderPassColorAttachment, CommandEncoderDescriptor, TextureUsage, PrimitiveState, ColorTargetState};
 use wgpu::util::DeviceExt;
 use naga::{valid::{ValidationFlags, Validator, Capabilities}};
 use bytemuck;
@@ -28,78 +29,78 @@ impl Uniforms {
 
 struct State {
     window: Window,
-    surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    sc_desc: wgpu::SwapChainDescriptor,
-    swapchain_format: wgpu::TextureFormat,
-    swap_chain: wgpu::SwapChain,
+    surface: Surface,
+    device: Device,
+    queue: Queue,
+    sc_desc: SwapChainDescriptor,
+    swapchain_format: TextureFormat,
+    swap_chain: SwapChain,
     size: winit::dpi::PhysicalSize<u32>,
-    pipeline_layout: wgpu::PipelineLayout,
-    render_pipeline: wgpu::RenderPipeline,
+    pipeline_layout: PipelineLayout,
+    render_pipeline: RenderPipeline,
     uniforms: Uniforms,
-    uniforms_buffer: wgpu::Buffer,
-    uniforms_bind_group: wgpu::BindGroup,
+    uniforms_buffer: Buffer,
+    uniforms_bind_group: BindGroup,
 
     fragment_path: PathBuf,
-    vertex_shader: wgpu::ShaderModule,
+    vertex_shader: ShaderModule,
 }
 
 impl State {
     // Creating some of the wgpu types requires async code
     async fn new(window: Window, fragment_path: &Path) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = Instance::new(BackendBit::PRIMARY);
         let surface = unsafe { instance.create_surface(&window) };
         let adapter = instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
+            &RequestAdapterOptions {
+                power_preference: PowerPreference::default(),
                 compatible_surface: Some(&surface)},
         ).await.unwrap();
         let (device, queue) = adapter.request_device(
-            &wgpu::DeviceDescriptor {
+            &DeviceDescriptor {
                 features: wgpu::Features::default(),
                 limits: wgpu::Limits::default(),
                 label: None},
             None,
         ).await.unwrap();
-        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        let vertex_shader = device.create_shader_module(&ShaderModuleDescriptor {
             label: Some("Vertex Shader"),
-            flags: wgpu::ShaderFlags::all(),
-            source: wgpu::ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
+            flags: ShaderFlags::all(),
+            source: ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
         let uniforms = Uniforms{resolution: [size.width as f32, size.height as f32], playime: 0.0};
         let uniforms_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Uniform Buffer"),
                 contents: bytemuck::bytes_of(&uniforms),
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST});
-        let uniforms_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST});
+        let uniforms_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("uniform_bind_group_layout"),
             entries: &[
-                wgpu::BindGroupLayoutEntry {
+                BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
+                    visibility: ShaderStage::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
                         min_binding_size: None},
                     count: None}]});
-        let uniforms_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let uniforms_bind_group = device.create_bind_group(&BindGroupDescriptor {
             layout: &uniforms_bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry {
+                BindGroupEntry {
                     binding: 0,
                     resource: uniforms_buffer.as_entire_binding()}],
             label: Some("uniform_bind_group")});
         let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).unwrap();
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        let sc_desc = SwapChainDescriptor {
+            usage: TextureUsage::RENDER_ATTACHMENT,
             format: swapchain_format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo}; // Faster framerate with Immediate or Mailbox but this is not optimal for mobile... 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
             bind_group_layouts: &[&uniforms_bind_group_layout],
             push_constant_ranges: &[]});
@@ -109,14 +110,14 @@ impl State {
             uniforms, uniforms_buffer, uniforms_bind_group, render_pipeline, fragment_path: pathbuf, vertex_shader}
     }
 
-    fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
+    fn render(&mut self) -> Result<(), SwapChainError> {
         let frame = self.swap_chain.get_current_frame()?.output;
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor{label: Some("Render Encoder")});
+        let mut encoder = self.device.create_command_encoder(&CommandEncoderDescriptor{label: Some("Render Encoder")});
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
-                    wgpu::RenderPassColorAttachment {
+                    RenderPassColorAttachment {
                         view: &frame.view,
                         resolve_target: None,
                         ops: wgpu::Operations {
@@ -161,36 +162,36 @@ impl State {
 }
 
 fn create_pipeline(
-    device: &wgpu::Device,
-    vertex_shader: &wgpu::ShaderModule,
-    pipeline_layout: &wgpu::PipelineLayout,
-    swapchain_format: wgpu::TextureFormat,
+    device: &Device,
+    vertex_shader: &ShaderModule,
+    pipeline_layout: &PipelineLayout,
+    swapchain_format: TextureFormat,
     fragment_path: &PathBuf,
-) -> Result<wgpu::RenderPipeline, String> {
+) -> Result<RenderPipeline, String> {
     let fragment_content = fs::read_to_string(fragment_path).unwrap();
     let module = naga::front::wgsl::parse_str(&fragment_content).map_err(|e| format!("Parse Error: {}", &e))?;
     Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module).map_err(|e| format!("Validation error: {}", &e))?;
-    let fragment_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+    let fragment_shader = device.create_shader_module(&ShaderModuleDescriptor {
         label: Some("Fragment shader"),
-        source: wgpu::ShaderSource::Wgsl(fragment_content.into()),
-        flags: wgpu::ShaderFlags::all()});
-    Ok(device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        source: ShaderSource::Wgsl(fragment_content.into()),
+        flags: ShaderFlags::all()});
+    Ok(device.create_render_pipeline(&RenderPipelineDescriptor {
         label: Some("Render Pipeline"),
         layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
+        vertex: VertexState {
             module: &vertex_shader,
             entry_point: "main",
             buffers: &[]},
-        fragment: Some(wgpu::FragmentState {
+        fragment: Some(FragmentState {
             module: &fragment_shader,
             entry_point: "main",
-            targets: &[wgpu::ColorTargetState {
+            targets: &[ColorTargetState {
                 format: swapchain_format,
-                blend: Some(wgpu::BlendState::REPLACE),
-                write_mask: wgpu::ColorWrite::ALL}]}),
-        primitive: wgpu::PrimitiveState::default(),
+                blend: Some(BlendState::REPLACE),
+                write_mask: ColorWrite::ALL}]}),
+        primitive: PrimitiveState::default(),
         depth_stencil: None,
-        multisample: wgpu::MultisampleState{count: 1, mask: !0, alpha_to_coverage_enabled: false}})
+        multisample: MultisampleState{count: 1, mask: !0, alpha_to_coverage_enabled: false}})
     )
 }
 
@@ -225,7 +226,7 @@ fn main() {
     }
 
     let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let mut state = pollster::block_on(State::new(window, path.as_path()));
+    let mut state = block_on(State::new(window, path.as_path()));
     let instant = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
@@ -236,9 +237,9 @@ fn main() {
                 match state.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => state.resize(state.size),
+                    Err(SwapChainError::Lost) => state.resize(state.size),
                     // The system is out of memory, we should probably quit
-                    Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
                     // All other errors (Outdated, Timeout) should be resolved by the next frame
                     Err(e) => eprintln!("{:?}", e),
                 }
