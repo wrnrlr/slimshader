@@ -1,16 +1,30 @@
-use std::{fs};
-use std::path::{PathBuf,Path};
-use std::sync::mpsc::channel;
+use std::{fs,
+    time::Instant,
+    path::{PathBuf,Path},
+    sync::mpsc::channel};
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{WindowBuilder, Window}};
 use pollster;
 use notify::{RawEvent, RecommendedWatcher, Watcher};
+use wgpu::util::DeviceExt;
 use naga::{valid::{ValidationFlags, Validator, Capabilities}};
+use bytemuck;
 
 #[derive(Debug)]
 struct ReloadEvent;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    pub resolution: [u32; 2],
+    pub playime: f32,
+}
+
+impl Uniforms {
+    fn as_bytes(&self)-> &[u8] { bytemuck::bytes_of(self) }
+}
 
 struct State {
     window: Window,
@@ -23,6 +37,9 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
+    uniforms: Uniforms,
+    uniforms_buffer: wgpu::Buffer,
+    uniforms_bind_group: wgpu::BindGroup,
 
     fragment_path: PathBuf,
     vertex_shader: wgpu::ShaderModule,
@@ -47,6 +64,34 @@ impl State {
                 label: None},
             None,
         ).await.unwrap();
+        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex Shader"),
+            flags: wgpu::ShaderFlags::all(),
+            source: wgpu::ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
+        let uniforms = Uniforms{resolution: [size.width, size.height], playime: 0.0};
+        let uniforms_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Uniform Buffer"),
+                contents: bytemuck::bytes_of(&uniforms),
+                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST});
+        let uniforms_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("uniform_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None},
+                    count: None}]});
+        let uniforms_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniforms_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniforms_buffer.as_entire_binding()}],
+            label: Some("uniform_bind_group")});
         let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).unwrap();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
@@ -55,17 +100,14 @@ impl State {
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo}; // Faster framerate with Immediate or Mailbox but this is not optimal for mobile... 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
-        let vertex_shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: Some("Vertex Shader"),
-            flags: wgpu::ShaderFlags::all(),
-            source: wgpu::ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[], // TODO add bind group for uniform buffer with screen resolution
+            bind_group_layouts: &[&uniforms_bind_group_layout],
             push_constant_ranges: &[]});
         let pathbuf = fragment_path.to_path_buf();
         let render_pipeline = create_pipeline(&device, &vertex_shader, &pipeline_layout, swapchain_format, &pathbuf).unwrap();
-        Self{window, surface, device, queue, sc_desc, swapchain_format, swap_chain, size, pipeline_layout, render_pipeline, fragment_path: pathbuf, vertex_shader}
+        Self{window, surface, device, queue, sc_desc, swapchain_format, swap_chain, size, pipeline_layout,
+            uniforms, uniforms_buffer, uniforms_bind_group, render_pipeline, fragment_path: pathbuf, vertex_shader}
     }
 
     fn render(&mut self) -> Result<(), wgpu::SwapChainError> {
@@ -84,6 +126,7 @@ impl State {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
             render_pass.draw(0..3, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -104,6 +147,7 @@ impl State {
     }
 
     fn update(&mut self) {
+        self.queue.write_buffer(&self.uniforms_buffer, 0, self.uniforms.as_bytes());
     }
 
     fn reload(&mut self) {
@@ -157,8 +201,7 @@ fn main() {
     let path = PathBuf::from(filename.as_str());
     println!("{:?}", path);
 
-    let content = fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
-    println!("{}", content);
+    fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
 
     env_logger::init();
 
@@ -183,10 +226,12 @@ fn main() {
 
     let window = WindowBuilder::new().build(&event_loop).unwrap();
     let mut state = pollster::block_on(State::new(window, path.as_path()));
+    let instant = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::RedrawRequested(_) => {
+                state.uniforms.playime = instant.elapsed().as_secs_f32();
                 state.update();
                 match state.render() {
                     Ok(_) => {}
