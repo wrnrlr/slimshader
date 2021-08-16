@@ -1,11 +1,27 @@
 # Slimshader
 
-A tool to experiment with the WebGPU shader language.
-Start slimshader to watch the `demo.wgsl` file for changes.
+> Shadertoy for WebGPU
+
+A simple command line tool to help developers experiment with the WebGPU shader language.
+It compiles and executes a fragment shader and displays the result on your screen.
+Slimshader will reload the shader if the file changes. Errors are logged to the console.
+
+## Usage
+
+Build binairy from source and install in `PATH`.
 
 ```bash
-slimshader demo.wgsl
+cargo install --git https://github.com/wrnrlr/slimshader
 ```
 
-If the shader is compiled succesfully, display the output it in a window, otherwise it logs error to console.
+Start slimshader.
 
+```bash
+slimshader example/sphere.wgsl
+```
+
+Alternativly clone the repository and run it from there.
+
+```bash
+cargo run -- example/sphere.wgsl
+```
