@@ -1,20 +1,27 @@
-// Fragment shader
+[[block]]
+struct Uniforms {
+    resolution: vec2<f32>; // in pixels
+    playtime: f32; // in seconds
+};
+
+[[group(0), binding(0)]]
+var uniforms: Uniforms;
+
+struct VertexOutput {
+    [[location(0)]] coord: vec2<f32>;
+    [[builtin(position)]] position: vec4<f32>;
+};
 
 let MAX_STEPS:u32 = 100u;
 let MAX_DIST:f32 = 100.0;
 let SURF_DIST:f32 = 0.01;
 
-struct VertexOutput {
-    [[location(0)]] coord: vec2<f32>;
-    [[builtin(position)]] clip_position: vec4<f32>;
-};
-
-// distance between plane ans sphare of exis aligned 
+// distance between plane ans sphare when axis align
 fn GetDist(p:vec3<f32>)->f32 {
     let sphere = vec4<f32>(0.0, 1.0, 6.0, 1.0);
-    let dS = length(p-sphere.xyz)-sphere.w;
-    let dP = p.y;
-    let d = min(dS, dP);
+    let sphereDist = length(p-sphere.xyz)-sphere.w;
+    let planeDist = p.y;
+    let d = min(sphereDist, planeDist);
     return d;
 }
 
@@ -31,15 +38,11 @@ fn RayMarch(ro:vec3<f32>, rd:vec3<f32>)->f32 {
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let uv = (in.coord + vec2<f32>(1., 1.)) / 2.;
-    //let uv = (in.coord - (0.5*in.coord)) / in.coord.y;
-
+    let uv = (in.position.xy - 0.5*uniforms.resolution) / uniforms.resolution.y;
     let ro = vec3<f32>(0.0, 1.0, 0.0); // ray/camera origin
     let rd = normalize(vec3<f32>(uv.x, uv.y, 1.0)); // ray/camera direction
-
-    let d = RayMarch(ro, rd);
-    let col = vec3<f32>(d/6.0);
-
+    let d = RayMarch(ro, rd)/6.0;
+    let col = vec3<f32>(d);
     return vec4<f32>(col, 1.0);
 }
 
