@@ -25,3 +25,7 @@ Alternativly clone the repository and run it from there.
 ```bash
 cargo run -- example/sphere.wgsl
 ```
+
+# Awesome Links
+
+* [3D SDF Primitives in WGSL](https://gist.github.com/munrocket/f247155fc22ecb8edf974d905c677de1)
