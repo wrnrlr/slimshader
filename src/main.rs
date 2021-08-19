@@ -21,6 +21,7 @@ struct ReloadEvent;
 struct Uniforms {
     pub resolution: [f32; 2],
     pub playime: f32,
+    pub mouse: [f32; 3],
 }
 
 impl Uniforms {
@@ -68,7 +69,7 @@ impl State {
             label: Some("Vertex Shader"),
             flags: ShaderFlags::all(),
             source: ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
-        let uniforms = Uniforms{resolution: [size.width as f32, size.height as f32], playime: 0.0};
+        let uniforms = Uniforms{resolution: [size.width as f32, size.height as f32], playime: 0.0, mouse: [0.0, 0.0, 0.0]};
         let uniforms_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Uniform Buffer"),
@@ -258,6 +259,12 @@ fn main() {
                     }
                     WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                         state.resize(**new_inner_size);
+                    }
+                    WindowEvent::CursorMoved {position, ..} => {
+                        let size = state.window.inner_size();
+                        let normalized_x = position.x as f32 / size.width as f32;
+                        let normalized_y = position.y as f32 / size.height as f32;
+                        state.uniforms.mouse = [normalized_x * 2.0 - 1.0, -normalized_y * 2.0 + 1.0, 0.0];
                     }
                     _ => {}
                 }
