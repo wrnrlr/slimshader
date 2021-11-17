@@ -8,7 +8,7 @@ use winit::{
     window::{WindowBuilder, Window}};
 use pollster::block_on;
 use notify::{RawEvent, RecommendedWatcher, Watcher};
-use wgpu::{Color, Operations, LoadOp, Surface, Features, Limits, Device, Queue, Instance, DeviceDescriptor, SwapChainDescriptor, TextureFormat, SwapChain, PipelineLayout, RenderPipeline, Buffer, BindGroup, ShaderModule, ShaderSource, ShaderFlags, ShaderModuleDescriptor, BindGroupEntry, RequestAdapterOptions, ShaderStage, BindingType, BufferBindingType, BufferUsage, RenderPipelineDescriptor, VertexState, FragmentState, PowerPreference, BackendBit, BindGroupDescriptor, BindGroupLayoutDescriptor, RenderPassDescriptor, PipelineLayoutDescriptor, BindGroupLayoutEntry, SwapChainError, RenderPassColorAttachment, CommandEncoderDescriptor, TextureUsage, PrimitiveState, ColorTargetState, BlendState, ColorWrite, MultisampleState, ShaderModuleSource};
+use wgpu::{Color, Operations, LoadOp, Surface, Features, Limits, Device, Queue, Instance, DeviceDescriptor, SwapChainDescriptor, TextureFormat, SwapChain, PipelineLayout, RenderPipeline, Buffer, BindGroup, ShaderModule, ShaderSource, ShaderFlags, ShaderModuleDescriptor, BindGroupEntry, RequestAdapterOptions, ShaderStage, BindingType, BufferBindingType, BufferUsage, RenderPipelineDescriptor, VertexState, FragmentState, PowerPreference, BackendBit, BindGroupDescriptor, BindGroupLayoutDescriptor, RenderPassDescriptor, PipelineLayoutDescriptor, BindGroupLayoutEntry, SwapChainError, RenderPassColorAttachment, CommandEncoderDescriptor, TextureUsage, PrimitiveState, ColorTargetState, BlendState, ColorWrite, MultisampleState};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use naga::{valid::{ValidationFlags, Validator, Capabilities}};
 use bytemuck;
@@ -113,8 +113,7 @@ impl State {
         color_attachments: &[
           RenderPassColorAttachment {
             view: &frame.view, resolve_target: None,
-            ops: Operations {
-              load: LoadOp::Clear(Color{r:0.1,g:0.2,b:0.3,a:1.0}),store: true}}],
+            ops: Operations {load: LoadOp::Clear(Color{r:0.1,g:0.2,b:0.3,a:1.0}),store: true}}],
         depth_stencil_attachment: None,
       });
       render_pass.set_pipeline(&self.render_pipeline);
@@ -188,79 +187,74 @@ fn create_pipeline(
 }
 
 fn main() {
-    println!("Slim Shader!");
+  println!("Slim Shader!");
 
-    let filename = std::env::args().nth(1).expect("no path to file fiven");
-    let path = PathBuf::from(filename.as_str());
-    println!("{:?}", path);
+  let filename = std::env::args().nth(1).expect("no path to file fiven");
+  let path = PathBuf::from(filename.as_str());
+  println!("{:?}", path);
 
-    fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
+  fs::read_to_string(path.to_str().unwrap()).expect("could not read file");
 
-    env_logger::init();
+  env_logger::init();
 
-    let event_loop:EventLoop<ReloadEvent> = EventLoop::with_user_event();
-    let proxy:EventLoopProxy<ReloadEvent> = event_loop.create_proxy();
+  let event_loop:EventLoop<ReloadEvent> = EventLoop::with_user_event();
+  let proxy:EventLoopProxy<ReloadEvent> = event_loop.create_proxy();
 
-    {
-      let fragment_path = path.clone();
-      std::thread::spawn(move || {
-        let (tx, rx) = channel();
-        let mut watcher: RecommendedWatcher = Watcher::new_raw(tx).unwrap();
-        watcher.watch(&fragment_path, notify::RecursiveMode::NonRecursive).unwrap();
-        loop {
-          match rx.recv() {
-            Ok(RawEvent {path: Some(_), op: Ok(_), ..}) => proxy.send_event(ReloadEvent).unwrap(),
-            Ok(event) => println!("broken event: {:?}", event),
-            Err(e) => println!("watch error: {:?}", e),
-          }
+  {
+    let fragment_path = path.clone();
+    std::thread::spawn(move || {
+      let (tx, rx) = channel();
+      let mut watcher: RecommendedWatcher = Watcher::new_raw(tx).unwrap();
+      watcher.watch(&fragment_path, notify::RecursiveMode::NonRecursive).unwrap();
+      loop {
+        match rx.recv() {
+          Ok(RawEvent {path: Some(_), op: Ok(_), ..}) => proxy.send_event(ReloadEvent).unwrap(),
+          Ok(event) => println!("broken event: {:?}", event),
+          Err(e) => println!("watch error: {:?}", e),
         }
-      });
-    }
-
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-    let mut state = block_on(State::new(window, path.as_path()));
-    let instant = Instant::now();
-
-    event_loop.run(move |event, _, control_flow| {
-      match event {
-        RedrawRequested(_) => {
-          state.uniforms.playime = instant.elapsed().as_secs_f32();
-          state.update();
-          match state.render() {
-            Ok(_) => {}
-            Err(SwapChainError::Lost) => state.resize(state.size),
-            Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-            Err(e) => eprintln!("{:?}", e),
-          }
-        }
-        MainEventsCleared => { state.window.request_redraw(); }
-        UserEvent(ReloadEvent) => { state.reload(); }
-        Event::WindowEvent {ref event, window_id} if window_id == state.window.id() => if !state.input(event) {
-          match event {
-            WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
-              input: KeyboardInput {
-                    state: ElementState::Pressed,
-                    virtual_keycode: Some(VirtualKeyCode::Escape),
-                    ..
-                  },
-              ..
-            } => *control_flow = ControlFlow::Exit,
-            WindowEvent::Resized(physical_size) => {
-              state.resize(*physical_size);
-            }
-            WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-              state.resize(**new_inner_size);
-            }
-            WindowEvent::CursorMoved {position, ..} => {
-              let size = state.window.inner_size();
-              let normalized_x = position.x as f32 / size.width as f32;
-              let normalized_y = position.y as f32 / size.height as f32;
-              state.uniforms.mouse = [normalized_x * 2.0 - 1.0, -normalized_y * 2.0 + 1.0, 0.0];
-            }
-            _ => {}
-        }
-      }
-      _ => {}
       }
     });
+  }
+
+  let window = WindowBuilder::new().build(&event_loop).unwrap();
+  let mut state = block_on(State::new(window, path.as_path()));
+  let instant = Instant::now();
+
+  event_loop.run(move |event, _, control_flow| {
+    match event {
+      RedrawRequested(_) => {
+        state.uniforms.playime = instant.elapsed().as_secs_f32();
+        state.update();
+        match state.render() {
+          Ok(_) => {}
+          Err(SwapChainError::Lost) => state.resize(state.size),
+          Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+          Err(e) => eprintln!("{:?}", e),
+        }
+      }
+      MainEventsCleared => { state.window.request_redraw(); }
+      UserEvent(ReloadEvent) => { state.reload(); }
+      Event::WindowEvent {ref event, window_id} if window_id == state.window.id() => if !state.input(event) {
+        match event {
+          WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
+            input: KeyboardInput { state: ElementState::Pressed, virtual_keycode: Some(VirtualKeyCode::Escape), .. }, ..
+          } => *control_flow = ControlFlow::Exit,
+          WindowEvent::Resized(physical_size) => {
+            state.resize(*physical_size);
+          }
+          WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+            state.resize(**new_inner_size);
+          }
+          WindowEvent::CursorMoved {position, ..} => {
+            let size = state.window.inner_size();
+            let normalized_x = position.x as f32 / size.width as f32;
+            let normalized_y = position.y as f32 / size.height as f32;
+            state.uniforms.mouse = [normalized_x * 2.0 - 1.0, -normalized_y * 2.0 + 1.0, 0.0];
+          }
+          _ => {}
+      }
+    }
+    _ => {}
+    }
+  });
 }
