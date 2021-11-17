@@ -11,7 +11,7 @@ license = "ISC"
 winit = "0.25"
 env_logger = "0.8"
 log = "0.4"
-wgpu = "0.9"
+wgpu = "0.11"
 futures = "0.3"
 bytemuck = { version = "1.5", features = [ "derive" ] }
 anyhow = "1.0"

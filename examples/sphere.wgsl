@@ -5,7 +5,7 @@ struct Uniforms {
 };
 
 [[group(0), binding(0)]]
-var uniforms: Uniforms;
+var<uniform> uniforms: Uniforms;
 
 struct VertexOutput {
     [[location(0)]] coord: vec2<f32>;
@@ -57,9 +57,9 @@ fn GetLight(p: vec3<f32>)->f32 {
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-    let uv = ((in.position.xy - 0.5*uniforms.resolution) / uniforms.resolution.y)*vec2<f32>(1.0,-1.0);
+    let uv = ((in.position.xy - 0.5*uniforms.resolution) / uniforms.resolution.y);//*vec2<f32>(1.0,-1.0);
     let ro = vec3<f32>(0.0, 1.0, 0.0); // ray/camera origin
-    let rd = normalize(vec3<f32>(uv.x, uv.y, 1.0)); // ray/camera direction
+    let rd = normalize(vec3<f32>(uv.x, -uv.y, 1.0)); // ray/camera direction
     let d = RayMarch(ro, rd);
     let p = ro + rd * d;
     let difuse = GetLight(p);

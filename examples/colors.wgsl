@@ -5,12 +5,16 @@ struct Uniforms {
 };
 
 [[group(0), binding(0)]]
-var uniforms: Uniforms;
+var<uniform> uniforms: Uniforms;
 
 struct VertexOutput {
     [[location(0)]] coord: vec2<f32>;
     [[builtin(position)]] position: vec4<f32>;
 };
+
+fn sdSphere(p: vec3<f32>, r: f32) -> f32 {
+  return length(p) - r;
+}
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {

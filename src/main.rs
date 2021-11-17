@@ -8,7 +8,7 @@ use winit::{
     window::{WindowBuilder, Window}};
 use pollster::block_on;
 use notify::{RawEvent, RecommendedWatcher, Watcher};
-use wgpu::{Color, Operations, LoadOp, Surface, Features, Limits, Device, Queue, Instance, DeviceDescriptor, SwapChainDescriptor, TextureFormat, SwapChain, PipelineLayout, RenderPipeline, Buffer, BindGroup, ShaderModule, ShaderSource, ShaderFlags, ShaderModuleDescriptor, BindGroupEntry, RequestAdapterOptions, ShaderStage, BindingType, BufferBindingType, BufferUsage, RenderPipelineDescriptor, VertexState, FragmentState, PowerPreference, BackendBit, BindGroupDescriptor, BindGroupLayoutDescriptor, RenderPassDescriptor, PipelineLayoutDescriptor, BindGroupLayoutEntry, SwapChainError, RenderPassColorAttachment, CommandEncoderDescriptor, TextureUsage, PrimitiveState, ColorTargetState, BlendState, ColorWrite, MultisampleState};
+use wgpu::{Color, Operations, LoadOp, Surface, Features, Limits, Device, Queue, Instance, DeviceDescriptor, PipelineLayout, RenderPipeline, Buffer, BindGroup, ShaderModule, ShaderSource, ShaderModuleDescriptor, BindGroupEntry, RequestAdapterOptions, ShaderStages, BindingType, BufferBindingType, BufferUsages, RenderPipelineDescriptor, VertexState, FragmentState, PowerPreference, BindGroupDescriptor, BindGroupLayoutDescriptor, RenderPassDescriptor, PipelineLayoutDescriptor, BindGroupLayoutEntry, RenderPassColorAttachment, CommandEncoderDescriptor, PrimitiveState, SurfaceError, MultisampleState, SurfaceConfiguration};
 use wgpu::util::{DeviceExt, BufferInitDescriptor};
 use naga::{valid::{ValidationFlags, Validator, Capabilities}};
 use bytemuck;
@@ -31,11 +31,10 @@ impl Uniforms {
 struct State {
   window: Window,
   surface: Surface,
+  config: SurfaceConfiguration,
   device: Device,
   queue: Queue,
-  sc_desc: SwapChainDescriptor,
-  swapchain_format: TextureFormat,
-  swap_chain: SwapChain,
+
   size: winit::dpi::PhysicalSize<u32>,
   pipeline_layout: PipelineLayout,
   render_pipeline: RenderPipeline,
@@ -51,30 +50,37 @@ impl State {
   // Creating some of the wgpu types requires async code
   async fn new(window: Window, fragment_path: &Path) -> Self {
     let size = window.inner_size();
-    let instance = Instance::new(BackendBit::PRIMARY);
+    let instance = Instance::new(wgpu::Backends::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
-    let adapter = instance.request_adapter(
-      &RequestAdapterOptions {power_preference: PowerPreference::default(), compatible_surface: Some(&surface)},
+    let adapter = instance.request_adapter(&RequestAdapterOptions {
+      power_preference: PowerPreference::default(),
+      compatible_surface: Some(&surface),
+      force_fallback_adapter: false},
     ).await.unwrap();
+    let config = wgpu::SurfaceConfiguration {
+      usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+      format: surface.get_preferred_format(&adapter).unwrap(),
+      width: size.width, height: size.height,
+      present_mode: wgpu::PresentMode::Fifo};
     let (device, queue) = adapter.request_device(
       &DeviceDescriptor {features: Features::default(), limits: Limits::default(), label: None}, None,
     ).await.unwrap();
+    surface.configure(&device, &config);
     let vertex_shader = device.create_shader_module(&ShaderModuleDescriptor {
         label: Some("Vertex Shader"),
-        flags: ShaderFlags::all(),
         source: ShaderSource::Wgsl(include_str!("./vertex.wgsl").into())});
     let uniforms = Uniforms{resolution: [size.width as f32, size.height as f32], playime: 0.0, mouse: [0.0, 0.0, 0.0]};
     let uniforms_buffer = device.create_buffer_init(
       &BufferInitDescriptor {
         label: Some("Uniform Buffer"),
         contents: bytemuck::bytes_of(&uniforms),
-        usage: BufferUsage::UNIFORM | BufferUsage::COPY_DST});
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST});
     let uniforms_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("uniform_bind_group_layout"),
         entries: &[
           BindGroupLayoutEntry {
             binding: 0,
-            visibility: ShaderStage::FRAGMENT,
+            visibility: ShaderStages::FRAGMENT,
             ty: BindingType::Buffer {
               ty: BufferBindingType::Uniform,
               has_dynamic_offset: false,
@@ -86,50 +92,43 @@ impl State {
           binding: 0,
           resource: uniforms_buffer.as_entire_binding()}],
         label: Some("uniform_bind_group")});
-    let swapchain_format = adapter.get_swap_chain_preferred_format(&surface).unwrap();
-    let sc_desc = SwapChainDescriptor {
-        usage: TextureUsage::RENDER_ATTACHMENT,
-        format: swapchain_format,
-        width: size.width,
-        height: size.height,
-        present_mode: wgpu::PresentMode::Fifo}; // Faster framerate with Immediate or Mailbox but this is not optimal for mobile... 
-    let swap_chain = device.create_swap_chain(&surface, &sc_desc);
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: Some("Render Pipeline Layout"),
         bind_group_layouts: &[&uniforms_bind_group_layout],
         push_constant_ranges: &[]});
     let pathbuf = fragment_path.to_path_buf();
-    let render_pipeline = create_pipeline(&device, &vertex_shader, &pipeline_layout, swapchain_format, &pathbuf).unwrap();
-    Self{window, surface, device, queue, sc_desc, swapchain_format, swap_chain, size, pipeline_layout,
+    let render_pipeline = create_pipeline(&device, config.format, &vertex_shader, &pipeline_layout, &pathbuf).unwrap();
+    Self{window, surface, config, device, queue, size, pipeline_layout,
         uniforms, uniforms_buffer, uniforms_bind_group, render_pipeline, fragment_path: pathbuf, vertex_shader}
   }
 
-  fn render(&mut self) -> Result<(), SwapChainError> {
-    let frame = self.swap_chain.get_current_frame()?.output;
+  fn render(&mut self) -> Result<(), SurfaceError> {
+    let frame = self.surface.get_current_texture().expect("Surface error");
+    let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
     let mut encoder = self.device.create_command_encoder(&CommandEncoderDescriptor{label: Some("Render Encoder")});
     {
       let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
         label: Some("Render Pass"),
         color_attachments: &[
           RenderPassColorAttachment {
-            view: &frame.view, resolve_target: None,
+            view: &view, resolve_target: None,
             ops: Operations {load: LoadOp::Clear(Color{r:0.1,g:0.2,b:0.3,a:1.0}),store: true}}],
-        depth_stencil_attachment: None,
-      });
+        depth_stencil_attachment: None});
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, &self.uniforms_bind_group, &[]);
       render_pass.draw(0..3, 0..1);
     }
     self.queue.submit(std::iter::once(encoder.finish()));
+    frame.present();
     Ok(())
   }
 
   fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
     if new_size.width > 0 && new_size.height > 0 {
       self.size = new_size;
-      self.sc_desc.width = new_size.width;
-      self.sc_desc.height = new_size.height;
-      self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
+      self.config.width = new_size.width;
+      self.config.height = new_size.height;
+      self.surface.configure(&self.device, &self.config);
       self.uniforms.resolution = [new_size.width as f32, new_size.height as f32];
     }
   }
@@ -144,7 +143,7 @@ impl State {
 
   fn reload(&mut self) {
     println!("reload fragment shader");
-    match create_pipeline(&self.device, &self.vertex_shader, &self.pipeline_layout, self.swapchain_format, &self.fragment_path) {
+    match create_pipeline(&self.device, self.config.format, &self.vertex_shader, &self.pipeline_layout, &self.fragment_path) {
         Ok(render_pipeline) => self.render_pipeline = render_pipeline,
         Err(e) => println!("{}", e),
       }
@@ -154,9 +153,9 @@ impl State {
 
 fn create_pipeline(
     device: &Device,
+    format: wgpu::TextureFormat,
     vertex_shader: &ShaderModule,
     pipeline_layout: &PipelineLayout,
-    swapchain_format: TextureFormat,
     fragment_path: &PathBuf,
 ) -> Result<RenderPipeline, String> {
     let fragment_content = fs::read_to_string(fragment_path).unwrap();
@@ -164,8 +163,7 @@ fn create_pipeline(
     Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module).map_err(|e| format!("Validation error: {}", &e))?;
     let fragment_shader = device.create_shader_module(&ShaderModuleDescriptor {
         label: Some("Fragment shader"),
-        source: ShaderSource::Wgsl(fragment_content.into()),
-        flags: ShaderFlags::all()});
+        source: ShaderSource::Wgsl(fragment_content.into())});
     Ok(device.create_render_pipeline(&RenderPipelineDescriptor {
       label: Some("Render Pipeline"),
       layout: Some(&pipeline_layout),
@@ -176,10 +174,7 @@ fn create_pipeline(
       fragment: Some(FragmentState {
         module: &fragment_shader,
         entry_point: "main",
-        targets: &[ColorTargetState {
-          format: swapchain_format,
-          blend: Some(BlendState::REPLACE),
-          write_mask: ColorWrite::ALL}]}),
+        targets: &[format.into()]}),
       primitive: PrimitiveState::default(),
       depth_stencil: None,
       multisample: MultisampleState{count: 1, mask: !0, alpha_to_coverage_enabled: false}})
@@ -227,8 +222,8 @@ fn main() {
         state.update();
         match state.render() {
           Ok(_) => {}
-          Err(SwapChainError::Lost) => state.resize(state.size),
-          Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+          // Err(SwapChainError::Lost) => state.resize(state.size),
+          // Err(SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
           Err(e) => eprintln!("{:?}", e),
         }
       }
