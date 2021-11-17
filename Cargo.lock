@@ -746,7 +746,7 @@ dependencies = [
  "khronos-egl",
  "libloading 0.7.0",
  "log",
- "naga",
+ "naga 0.5.0",
  "parking_lot",
  "raw-window-handle",
  "wasm-bindgen",
@@ -770,7 +770,7 @@ dependencies = [
  "gfx-hal",
  "log",
  "metal",
- "naga",
+ "naga 0.5.0",
  "objc",
  "parking_lot",
  "profiling",
@@ -793,7 +793,7 @@ dependencies = [
  "gfx-renderdoc",
  "inplace_it",
  "log",
- "naga",
+ "naga 0.5.0",
  "objc",
  "parking_lot",
  "raw-window-handle",
@@ -809,7 +809,7 @@ checksum = "7fbb575ea793dd0507b3082f4f2cde62dc9f3cebd98f5cd49ba2a4da97a976fd"
 dependencies = [
  "bitflags",
  "external-memory",
- "naga",
+ "naga 0.5.0",
  "raw-window-handle",
  "thiserror",
 ]
@@ -899,6 +899,12 @@ checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "humantime"
@@ -1211,6 +1217,23 @@ dependencies = [
  "petgraph",
  "rose_tree",
  "spirv_headers",
+ "thiserror",
+]
+
+[[package]]
+name = "naga"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eda66d09f712e1f0a6ab436137da4fac312f78301f6d4ac7cb8bfe96e988734f"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "codespan-reporting",
+ "fxhash",
+ "hexf-parse",
+ "indexmap",
+ "log",
+ "num-traits",
  "thiserror",
 ]
 
@@ -1638,7 +1661,7 @@ dependencies = [
  "env_logger",
  "futures",
  "log",
- "naga",
+ "naga 0.7.1",
  "notify",
  "pollster",
  "wgpu",
@@ -1960,7 +1983,7 @@ dependencies = [
  "arrayvec",
  "js-sys",
  "log",
- "naga",
+ "naga 0.5.0",
  "parking_lot",
  "raw-window-handle",
  "smallvec",
@@ -1992,7 +2015,7 @@ dependencies = [
  "gpu-alloc",
  "gpu-descriptor",
  "log",
- "naga",
+ "naga 0.5.0",
  "parking_lot",
  "profiling",
  "raw-window-handle",
