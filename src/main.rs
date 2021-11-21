@@ -61,7 +61,7 @@ impl State {
       usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
       format: surface.get_preferred_format(&adapter).unwrap(),
       width: size.width, height: size.height,
-      present_mode: wgpu::PresentMode::Fifo};
+      present_mode: wgpu::PresentMode::Mailbox};
     let (device, queue) = adapter.request_device(
       &DeviceDescriptor {features: Features::default(), limits: Limits::default(), label: None}, None,
     ).await.unwrap();
@@ -211,7 +211,7 @@ fn main() {
     });
   }
 
-  let window = WindowBuilder::new().build(&event_loop).unwrap();
+  let window = WindowBuilder::new().with_title("Slim Shader").build(&event_loop).unwrap();
   let mut state = block_on(State::new(window, path.as_path()));
   let instant = Instant::now();
 
