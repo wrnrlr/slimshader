@@ -16,7 +16,7 @@ let MAX_STEPS:u32 = 100u;
 let MAX_DIST:f32 = 100.0;
 let SURF_DIST:f32 = 0.01;
 
-// distance between plane ans sphare when axis align
+// distance between plane and sphere when axis align
 fn GetDist(p:vec3<f32>)->f32 {
     let sphere = vec4<f32>(0.0, 1.0, 6.0, 1.0);
     let sphereDist = length(p-sphere.xyz)-sphere.w;
