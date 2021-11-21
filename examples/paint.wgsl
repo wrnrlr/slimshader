@@ -61,7 +61,7 @@ fn init(fragCoord:vec2<f32>, resolution:vec2<f32>) {
   uv = fragCoord.xy / resolution;
 //   // vec2 m = mouse / resolution;
 
-  let position = (uv*2.0-(1.0))*aspect;
+  let position = (uv*2.0-(1.0))*aspect * vec2<f32>(1.0,-1.0);
 //   // query_position = (m*2.0-1.0)*aspect;
 
   STACK = Ctx(
@@ -327,48 +327,31 @@ fn shield_shape() {
   curve_to(vec2<f32>(0.2, -0.05), vec2<f32>(0.2, 0.2));
 }
 
-fn rectangle(o:vec2<f32>, s:vec2<f32>) {
-  let s_half = (s * 0.5);
-  let o_middle = o + s_half;
-  let d:vec4<f32> = abs(o_middle.xyxy - STACK.position) - s_half.xyxy;
-  let dmin:vec4<f32> = min(d, vec4<f32>(0.0,0.0,0.0,0.0));
-  let dmax:vec4<f32> = max(d, vec4<f32>(0.0,0.0,0.0,0.0));
-  let df:vec2<f32> = max(dmin.xz, dmin.yw) + length2(dmax);
-  add_field(df);
-}
-
-fn circle(uv:vec2<f32>, center:vec2<f32>, rad:f32) {
-	let d = length(center - uv) - rad;
+fn circle(uv:vec2<f32>, center:vec2<f32>, radius:f32) {
+	let d = length(center - uv) - radius;
 	let t = clamp(d, 0.0, 1.0);
-	add_field(vec2<f32>(1.0,1.0) - t);
+  let l = length(uv)-radius;
+	add_field(vec2<f32>(l,l));
 }
 
 [[stage(fragment)]]
 fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
-  let uv = ((in.position.xy - 0.5*uniforms.resolution) / uniforms.resolution.y);
-  // init(in.coord, uniforms.resolution);
-
-  // set_source_rgba(vec4<f32>(0.0,0.0,0.0,1.0));
-  // clear();
-  let black = vec4<f32>(0.0,0.0,0.0,1.0);
+  let aspect = uniforms.resolution.y / uniforms.resolution.x;
+  let center = 0.5*uniforms.resolution.xy;
+  let uv = ((in.position.xy - 0.5*uniforms.resolution) /
+          min(uniforms.resolution.x, uniforms.resolution.y)) *
+          vec2<f32>(1.0,-1.0);
+  let blue = vec4<f32>(0.0,0.0,1.0,1.0);
   let red = vec4<f32>(1.0,0.0,0.0,1.0);
-  // set_source_rgba(red);
-  // new_path();
-  let center = vec2<f32>(20.0 ,20.0); //uniforms.resolution.xy * 0.5;
-  let radius = 0.5 * uniforms.resolution.y;
-  // circle(in.coord, center, radius);
-  // rectangle(vec2<f32>(0.0, 0.0), vec2<f32>(4.0, 4.0));
-
-  // shield_shape();
+  init(in.position.xy, uniforms.resolution);
+  set_source_rgba(blue);
+  clear();
+  set_source_rgba(red);
+  let radius = 0.25;
+  // circle(uv, center, radius);
   // fill();
-
-  // return vec4<f32>(COLOR, 1.0);
-
-  let bg = black;
-
-  let d = length(center - uv) - radius;
-	let t = clamp(d, 0.0, 1.0);
-  let layer2 = vec4<f32>(red.xyz, t - 1.0);
-
-  return mix(bg, layer2, layer2.w);
+  new_path();
+  shield_shape();
+  fill();
+  return vec4<f32>(COLOR.rgb, 1.0);
 }
