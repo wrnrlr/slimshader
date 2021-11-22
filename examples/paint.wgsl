@@ -115,6 +115,14 @@ fn new_path() {
   STACK.has_clip = false;
 }
 
+fn set_blur(b:f32) {
+  if (b == 0.0) {
+    STACK.blur = vec2<f32>(0.0, 1.0);
+  } else {
+    STACK.blur = vec2<f32>(b, 0.0);
+  }
+}
+
 fn write_color(rgba:vec4<f32>, w:f32) {
   if (STACK.depth_test) {
     if (w == 1.0 && STACK.source_z <= DEPTH) {
@@ -250,7 +258,7 @@ fn test_cross(a:vec2<f32>, b:vec2<f32>, p:vec2<f32>)->f32 {
 // // Determine which side we're on (using barycentric parameterization)
 fn bezier_sign(A:vec2<f32>, B:vec2<f32>, C:vec2<f32>, p:vec2<f32>)->f32 {
   let a = C - A; let b = B - A; let c = p - A;
-  let bary = vec2<f32>(c.x*b.y-b.x*c.y,a.x*c.y-c.x*a.y) / (a.x*b.y-b.x*a.y);
+  let bary = vec2<f32>(c.x*b.y-b.x*c.y, a.x*c.y-c.x*a.y) / (a.x*b.y-b.x*a.y);
   let d = vec2<f32>(bary.y * 0.5, 0.0) + 1.0 - bary.x - bary.y;
   return mix(sign(d.x * d.x - d.y), mix(-1.0, 1.0,
     step(test_cross(A,B,p) * test_cross(B, C, p), 0.0)),
@@ -283,7 +291,7 @@ fn bezier(A:vec2<f32>, B:vec2<f32>, C:vec2<f32>, p:vec2<f32>)->f32 {
   let b = A - BB * 2.0 + C;
   let c = a * 2.0;
   let d = A - p;
-  let k = vec3<f32>(vec2<f32>(3.0,3.0) * dot(a,a) + dot(d,b), dot(d,a)) / dot(b,b);
+  let k = vec3<f32>(3.0*dot(a,b), 2.0*dot(a,a) + dot(d,b), dot(d,a)) / dot(b,b);
   let t = clamp(bezier_solve(k.x, k.y, k.z), vec3<f32>(0.0,0.0,0.0), vec3<f32>(1.0,1.0,1.0));
   var pos = A + (c + b*t.x)*t.x;
   var dis = length(pos - p);
@@ -341,17 +349,23 @@ fn main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
   let uv = ((in.position.xy - 0.5*uniforms.resolution) /
           min(uniforms.resolution.x, uniforms.resolution.y)) *
           vec2<f32>(1.0,-1.0);
+  let black = vec4<f32>(0.0,0.0,0.0,1.0);
   let blue = vec4<f32>(0.0,0.0,1.0,1.0);
   let red = vec4<f32>(1.0,0.0,0.0,1.0);
   init(in.position.xy, uniforms.resolution);
   set_source_rgba(blue);
   clear();
   set_source_rgba(red);
+  set_blur(0.01);
   let radius = 0.25;
   // circle(uv, center, radius);
   // fill();
   new_path();
   shield_shape();
-  fill();
-  return vec4<f32>(COLOR.rgb, 1.0);
+  fill_preserve();
+  set_source_rgba(black);
+  set_blur(0.01);
+  set_line_width(0.01);
+  stroke();
+  return blit();
 }
