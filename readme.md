@@ -23,7 +23,7 @@ slimshader example/sphere.wgsl
 Alternativly clone the repository and run it from there.
 
 ```bash
-cargo run -- example/sphere.wgsl
+cargo run -- examples/sphere.wgsl
 ```
 
 # Awesome Links

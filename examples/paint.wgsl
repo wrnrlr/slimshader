@@ -313,7 +313,6 @@ fn curve_to(b1:vec2<f32>, b2:vec2<f32>) {
 
 // Main ///////////////////////////////////////////////////
 
-[[block]]
 struct Uniforms {
   resolution: vec2<f32>; // in pixels
   playtime: f32; // in seconds

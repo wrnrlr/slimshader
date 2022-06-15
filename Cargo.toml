@@ -8,13 +8,13 @@ license = "ISC"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = "0.25"
+winit = "0.26.1"
 env_logger = "0.8"
 log = "0.4"
-wgpu = "0.11"
+wgpu = "0.12.0"
 futures = "0.3"
 bytemuck = { version = "1.5", features = [ "derive" ] }
 anyhow = "1.0"
 pollster = "0.2"
 notify = "4.0.17"
-naga = { version = "0.7", features = ["wgsl-in"] }
+naga = { version = "0.8.5", features = ["wgsl-in"] }

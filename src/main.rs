@@ -160,7 +160,7 @@ fn create_pipeline(
 ) -> Result<RenderPipeline, String> {
     let fragment_content = fs::read_to_string(fragment_path).unwrap();
     let module = naga::front::wgsl::parse_str(&fragment_content).map_err(|e| format!("Parse Error: {}", &e))?;
-    Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module).map_err(|e| format!("Validation error: {}", &e))?;
+    Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module).map_err(|e| format!("Validation error: {:?}", &e))?;
     let fragment_shader = device.create_shader_module(&ShaderModuleDescriptor {
         label: Some("Fragment shader"),
         source: ShaderSource::Wgsl(fragment_content.into())});
@@ -177,7 +177,9 @@ fn create_pipeline(
         targets: &[format.into()]}),
       primitive: PrimitiveState::default(),
       depth_stencil: None,
-      multisample: MultisampleState{count: 1, mask: !0, alpha_to_coverage_enabled: false}})
+      multisample: MultisampleState{count: 1, mask: !0, alpha_to_coverage_enabled: false},
+      multiview: None
+    })
     )
 }
 
